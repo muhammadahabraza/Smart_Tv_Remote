@@ -16,34 +16,43 @@ class ESP32Discovery:
         try:
             # 1. Get Local IP
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
+            try:
+                # Use a dummy address to get local IP
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                logger.info(f"System Local IP detected: {local_ip}")
+            except:
+                local_ip = "192.168.18.1" # Default to user's known network
+            finally:
+                s.close()
             
-            subnet = ".".join(local_ip.split(".")[:-1])
-            logger.info(f"Scanning subnet {subnet}.0/24 for IR Blasters...")
-            
-            semaphore = threading.BoundedSemaphore(20) # Limit concurrency
-            threads = []
-            
-            for i in range(1, 255):
-                ip = f"{subnet}.{i}"
-                if ip == local_ip: continue
-                
-                def scoped_ping(target_ip):
-                    with semaphore:
-                        self._ping_esp32(target_ip, lock)
+            # Check for multiple possible subnets (User is on .18.x)
+            possible_subnets = ["192.168.18", "192.168.1"]
+            current_subnet = ".".join(local_ip.split(".")[:-1])
+            if current_subnet not in possible_subnets:
+                possible_subnets.insert(0, current_subnet)
 
-                t = threading.Thread(target=scoped_ping, args=(ip,))
-                t.start()
-                threads.append(t)
+            threads = []
+            semaphore = threading.BoundedSemaphore(100) # Highly aggressive
             
-            # Wait for all threads to finish with a more realistic timeout
-            for t in threads:
-                t.join(timeout=0.05)
+            for subnet in possible_subnets:
+                logger.info(f"Scanning subnet {subnet}.0/24 for TCL IR Blaster...")
+                for i in range(1, 255):
+                    ip = f"{subnet}.{i}"
+                    if ip == local_ip: continue
+                    
+                    def scoped_ping(target_ip):
+                        with semaphore:
+                            self._ping_esp32(target_ip, lock)
+
+                    t = threading.Thread(target=scoped_ping, args=(ip,))
+                    t.daemon = True
+                    t.start()
+                    threads.append(t)
             
-            # Give a small grace period for the last batch of threads
-            time.sleep(1.5)
+            # Wait for threads
+            import time
+            time.sleep(2.0)
             
         except Exception as e:
             logger.error(f"ESP32 Discovery error: {e}")

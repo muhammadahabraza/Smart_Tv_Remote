@@ -17,13 +17,36 @@ def get_wifi_details():
         }
 
     try:
-        from jnius import autoclass
+        from jnius import autoclass, cast
+        from android.permissions import request_permissions, Permission
+        
+        # 1. Request Runtime Location Permission (Required for SSID on Android 10+)
+        def check_permissions():
+            request_permissions([Permission.ACCESS_FINE_LOCATION, Permission.ACCESS_COARSE_LOCATION])
+        
+        # Note: In a production app, we'd wait for the callback, 
+        # but here we request and then continue to attempt reading.
+        check_permissions()
+
         Context = autoclass('android.content.Context')
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
         activity = PythonActivity.mActivity
         
-        wifi_manager = activity.getSystemService(Context.WIFI_SERVICE)
+        # Use ConnectivityManager to check connection status first
+        connectivity_manager = activity.getSystemService(Context.CONNECTIVITY_SERVICE)
+        active_network = connectivity_manager.getActiveNetworkInfo()
         
+        if active_network is None or not active_network.isConnected():
+            details['status'] = "Disconnected"
+            return details
+
+        # Check if it's Wi-Fi
+        if active_network.getType() != 1: # TYPE_WIFI
+            details['status'] = "Not on Wi-Fi"
+            return details
+
+        # Get Wi-Fi specific info
+        wifi_manager = activity.getSystemService(Context.WIFI_SERVICE)
         if not wifi_manager.isWifiEnabled():
             details['status'] = "Wi-Fi Disabled"
             return details
@@ -37,13 +60,14 @@ def get_wifi_details():
         if ssid.startswith('"') and ssid.endswith('"'):
             ssid = ssid[1:-1]
         
-        if ssid == "<unknown ssid>" or ssid == "0x":
-            ssid = "Unknown SSID (Check Permissions)"
+        if ssid == "<unknown ssid>" or ssid == "0x" or not ssid:
+            ssid = "Connected (SSID Hidden)"
             
         # Get IP Address
         ip_int = connection_info.getIpAddress()
         import socket
         import struct
+        # Handle endianness for IP address conversion
         ip_str = socket.inet_ntoa(struct.pack("<L", ip_int))
 
         return {

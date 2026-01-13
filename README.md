@@ -1,4 +1,4 @@
-# SmartRemote: TCL TV Universal Controller
+# TCL Smart Remote
 
 A production-ready Android application built with Kivy and Python to control TCL Smart TVs via Wi-Fi (ECP) with a seamless ESP32-based IR fallback.
 

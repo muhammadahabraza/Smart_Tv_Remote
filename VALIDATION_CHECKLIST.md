@@ -1,4 +1,4 @@
-# Universal Smart TV Remote - QA Validation Checklist
+# TCL Smart TV Remote - QA Validation Checklist
 
 Use this checklist to validate the physical deployment of your system.
 
@@ -46,5 +46,5 @@ Use this checklist to validate the physical deployment of your system.
 ## 10. Security
 - [ ] **Leak Test**: No data sent to external servers (only local IPs).
 
-## 11. Expansion
-- [ ] **New Brand**: `vidaa_controller.py` logic is separate from `roku_controller_py`.
+## 11. Maintenance
+- [ ] **Updates**: Check for TCL firmware updates that might change ECP endpoints.

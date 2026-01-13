@@ -57,7 +57,7 @@
             height: dp(80)
             orientation: 'vertical'
             Label:
-                text: "SmartRemote"
+                text: "TCL Smart Remote"
                 font_size: '24sp'
                 bold: True
                 color: color_accent
@@ -67,7 +67,7 @@
                 color: color_on_surface if app.wifi_connected else color_offline
 
         RoundedButton:
-            text: "SCAN FOR DEVICES"
+            text: "SCAN FOR TCL TV"
             size_hint_y: None
             height: dp(56)
             on_release: root.scan_network()
@@ -117,15 +117,22 @@
             size_hint_y: None
             height: dp(60)
 
-        TextInput:
-            id: ir_ip_input
-            text: app.ir_blaster_ip
-            hint_text: "ESP32 IP Address"
-            multiline: False
+        BoxLayout:
+            spacing: dp(10)
             size_hint_y: None
             height: dp(50)
-            background_color: [1, 1, 1, 0.1]
-            foreground_color: [1, 1, 1, 1]
+            TextInput:
+                id: ir_ip_input
+                text: app.ir_blaster_ip
+                hint_text: "ESP32 IP Address"
+                multiline: False
+                background_color: [1, 1, 1, 0.1]
+                foreground_color: [1, 1, 1, 1]
+            RoundedButton:
+                text: "TEST"
+                size_hint_x: None
+                width: dp(80)
+                on_release: app.test_blaster(ir_ip_input.text)
 
         BoxLayout:
             spacing: dp(10)
@@ -179,11 +186,20 @@
                             pos: self.x, self.center_y - dp(6)
                             size: dp(12), dp(12)
                 
-                Label:
-                    text: app.connected_device_name
-                    halign: 'left'
-                    text_size: self.size
-                    bold: True
+                BoxLayout:
+                    orientation: 'vertical'
+                    Label:
+                        text: app.connected_device_name
+                        halign: 'left'
+                        text_size: self.size
+                        bold: True
+                        font_size: '16sp'
+                    Label:
+                        text: app.blaster_status
+                        halign: 'left'
+                        text_size: self.size
+                        font_size: '12sp'
+                        color: [0, 1, 0, 1] if app.blaster_found else [1, 0.5, 0, 1]
 
             Button:
                 text: "⚙"

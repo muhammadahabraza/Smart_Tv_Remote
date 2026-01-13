@@ -1,7 +1,7 @@
 # Constants and Configuration for SmartRemote
 
 # Colors shifted to Kivy KV file for styling, but kept here for logic if needed
-DEFAULT_IR_BLASTER_IP = "192.168.1.100"
+DEFAULT_IR_BLASTER_IP = "192.168.18.100"
 DISCOVERY_TIMEOUT = 3.0
 
 # Key Mappings (Internal internal_key -> Roku key string)

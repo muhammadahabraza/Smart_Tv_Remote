@@ -28,11 +28,19 @@ class DiscoveryScreen(Screen):
             show_error("Wi-Fi not connected. Please connect to your home network to scan for TV and Blaster.")
             return
 
-        self.ids.rv_devices.data = [{'text': "Scanning for TV and Blaster..."}]
+        # Clear previous results and show scanning message
+        self.ids.rv_devices.data = [{'text': "Scanning network for TCL devices..."}]
+        logger.info("User initiated network scan")
         
         def run_discovery():
+            logger.info("Starting SSDP discovery for TVs...")
             roku_devices = SSDPDiscovery().discover()
+            logger.info(f"SSDP found {len(roku_devices)} TV(s)")
+            
+            logger.info("Starting ESP32 discovery for IR Blasters...")
             esp32_devices = ESP32Discovery().discover()
+            logger.info(f"ESP32 scan found {len(esp32_devices)} blaster(s)")
+            
             all_devices = roku_devices + esp32_devices
             Clock.schedule_once(lambda dt: self._update_list(all_devices), 0)
 
@@ -41,17 +49,39 @@ class DiscoveryScreen(Screen):
     def _update_list(self, devices):
         data = []
         if not devices:
-            data.append({'text': "No devices found. Ensure Wi-Fi is on."})
+            data.append({'text': "No devices found. Ensure Wi-Fi is on and TV is powered."})
+        else:
+            logger.info(f"Displaying {len(devices)} discovered device(s)")
         
         for dev in devices:
-            type_label = "TV" if dev['type'] != 'ir' else "IR Blaster"
-            display_text = f"{dev['name']} ({type_label})\n[size=12sp]{dev['ip']}[/size]"
+            # Auto-update IR Blaster IP if found during scan
+            if dev['type'] == 'ir':
+                App.get_running_app().ir_blaster_ip = dev['ip']
+                logger.info(f"Auto-configured IR Blaster IP to {dev['ip']}")
+
+            # Create detailed display text
+            if dev['type'] == 'ir':
+                type_label = "TCL IR Blaster"
+                icon = "🔴"
+            elif dev['type'] == 'roku':
+                type_label = "TCL Roku TV"
+                icon = "📺"
+            elif dev['type'] == 'android':
+                type_label = "TCL Android TV"
+                icon = "📱"
+            else:
+                type_label = "TCL Smart TV"
+                icon = "📺"
+            
+            display_text = f"{icon} {dev['name']}\n[size=12sp]{type_label} • {dev['ip']}[/size]"
             data.append({
                 'text': display_text,
                 'markup': True,
                 'on_release': lambda d=dev: App.get_running_app().connect_to_device(d)
             })
+        
         self.ids.rv_devices.data = data
+        logger.info("Device list updated in UI")
 
     def connect_ir_manual(self):
         """Connect to fallback IR using saved IP."""
@@ -84,6 +114,8 @@ class SmartRemoteApp(App):
     wifi_info_text = StringProperty("Scanning Network...")
     wifi_connected = BooleanProperty(False)
     ir_blaster_ip = StringProperty(DEFAULT_IR_BLASTER_IP)
+    blaster_status = StringProperty("Searching for Blaster...")
+    blaster_found = BooleanProperty(False)
     
     controller = ObjectProperty(None, allownone=True)
     
@@ -92,14 +124,41 @@ class SmartRemoteApp(App):
         self._refresh_wifi_status(0)
         logger.info(f"Current Environment Status: {self.wifi_info_text}")
         
-        # 2. Attempt Auto-Reconnect
-        last_device = Storage.load_last_device()
-        if last_device:
-            logger.info(f"Auto-reconnecting to {last_device['ip']}...")
-            self.connect_to_device(last_device)
+        # 2. Skip auto-reconnect - let user scan for fresh devices
+        # This ensures the discovery screen shows current network state
+        logger.info("Skipping auto-reconnect. User will scan for devices.")
         
-        # 3. Schedule periodic Wi-Fi check
+        # 3. Schedule periodic Wi-Fi check and initial Blaster search
         Clock.schedule_interval(self._refresh_wifi_status, 10)
+        threading.Thread(target=self._initial_blaster_search, daemon=True).start()
+
+    def _initial_blaster_search(self):
+        """Silently find the IR Blaster in the background at startup."""
+        self.blaster_status = "Scanning network..."
+        logger.info("Starting background search for TCL IR Blaster...")
+        
+        # 1. Try currently set IP
+        test_ctrl = IRController(self.ir_blaster_ip)
+        if test_ctrl.connect():
+            self.blaster_status = f"Blaster Online: {self.ir_blaster_ip}"
+            self.blaster_found = True
+            return
+
+        # 2. Aggressive Multi-Subnet Scan
+        from discovery.esp32_discovery import ESP32Discovery
+        blasters = ESP32Discovery().discover()
+        
+        if blasters:
+            self.ir_blaster_ip = blasters[0]['ip']
+            self.blaster_status = f"Blaster Found: {self.ir_blaster_ip}"
+            self.blaster_found = True
+            logger.info(f"Auto-configured Blaster to {self.ir_blaster_ip}")
+            # Refresh controller if active
+            if self.is_ir_mode and self.controller:
+                self.controller.ip_address = self.ir_blaster_ip
+        else:
+            self.blaster_status = "Blaster Offline (Check Blue Light)"
+            self.blaster_found = False
 
     def _refresh_wifi_status(self, dt):
         details = get_wifi_details()
@@ -112,10 +171,9 @@ class SmartRemoteApp(App):
             self.wifi_info_text = f"Network: {details['status']}"
 
     def build(self):
-        self.title = "SmartRemote"
+        self.title = "TCL Smart Remote"
         self.icon = 'data/icon.png'
-        # Explicitly load the renamed KV file
-        Builder.load_file('smartremote.kv')
+        # smartremote.kv is auto-loaded based on class name SmartRemoteApp
         self.sm = ScreenManager()
         self.sm.add_widget(DiscoveryScreen(name='discovery'))
         self.sm.add_widget(ControlScreen(name='control'))
@@ -125,21 +183,31 @@ class SmartRemoteApp(App):
     def connect_to_device(self, device_info):
         """Initialize appropriate controller and verify connection."""
         ip = device_info['ip']
+        dev_type = device_info.get('type', 'unknown')
         self.connected_device_name = f"Connecting to {ip}..."
+        logger.info(f"Connection attempt: {ip} (Type: {dev_type})")
         
         def connection_task():
-            if device_info.get('type') == 'ir':
+            if dev_type == 'ir':
                 new_controller = IRController(ip)
-            elif device_info.get('type') == 'android' or device_info.get('type') == 'generic':
-                # Android/Generic TVs usually need IR for full control unless ADB is enabled
-                show_error(f"Found {device_info['name']}. Direct IP control for Android TV is limited. Switching to IR Blaster fallback.")
+            elif dev_type == 'android' or dev_type == 'generic':
+                logger.info(f"Android/Generic TV detected ({ip}). Requiring IR Blaster for control.")
+                # We prioritize the blaster IP entered in settings
                 new_controller = IRController(self.ir_blaster_ip)
+                # For Android, we ALWAYS succeed the 'connection' to the UI
+                # but we will show the status of the Blaster separately.
+                new_controller.connect() # Try it, but don't block on failure
+                Clock.schedule_once(lambda dt: self._on_connection_success(new_controller, device_info), 0)
+                return
             else:
                 new_controller = RokuController(ip)
             
+            logger.info(f"Calling connect() on {type(new_controller).__name__}")
             if new_controller.connect():
+                logger.info("Connection successful!")
                 Clock.schedule_once(lambda dt: self._on_connection_success(new_controller, device_info), 0)
             else:
+                logger.error(f"Connection failed for controller: {type(new_controller).__name__}")
                 Clock.schedule_once(lambda dt: self._on_connection_failure(ip), 0)
 
         threading.Thread(target=connection_task, daemon=True).start()
@@ -197,6 +265,22 @@ class SmartRemoteApp(App):
                 self.controller.send_key(arg)
             else:
                 Clock.schedule_once(lambda dt: show_error("Connection lost and IR Blaster not found."), 0)
+
+    def test_blaster(self, ip):
+        """Manually test an IR Blaster IP and show feedback."""
+        self.ir_blaster_ip = ip
+        logger.info(f"Manually testing IR Blaster at {ip}...")
+        
+        def test_task():
+            test_ctrl = IRController(ip)
+            if test_ctrl.connect():
+                logger.info("IR Blaster Test Success!")
+                show_error(f"Success! IR Blaster found at {ip}. You can now control your TCL TV.")
+            else:
+                logger.error("IR Blaster Test Failed.")
+                show_error(f"Failed to reach IR Blaster at {ip}. Check the blue light and ensure it's on your Wi-Fi.")
+        
+        threading.Thread(target=test_task, daemon=True).start()
 
     def switch_screen(self, screen_name):
         self.sm.current = screen_name

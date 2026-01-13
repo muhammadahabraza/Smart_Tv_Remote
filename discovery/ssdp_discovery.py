@@ -64,26 +64,82 @@ class SSDPDiscovery:
         if any(d['ip'] == ip for d in self.found_devices):
             return
 
-        # Identify Device Type
+        # Identify Device Type - TCL specific filters
+        device_name = None
+        device_type = None
+        
         if 'roku' in server or 'roku' in location:
-            self.found_devices.append({
-                'ip': ip,
-                'name': f"TCL Roku TV ({ip})",
-                'type': 'roku'
-            })
-            logger.info(f"Discovered Roku TV at {ip}")
+            device_type = 'roku'
+            # Try to get actual device name from Roku
+            device_name = self._get_roku_device_name(ip)
+            if not device_name:
+                device_name = f"TCL Roku TV"
         elif 'android' in server or 'dial' in server or 'dial' in st:
-            self.found_devices.append({
-                'ip': ip,
-                'name': f"TCL Android TV ({ip})",
-                'type': 'android'
-            })
-            logger.info(f"Discovered Android/DIAL TV at {ip}")
+            device_type = 'android'
+            device_name = self._get_device_name_from_location(headers.get('location', ''))
+            if not device_name:
+                device_name = f"TCL Android TV"
+        elif 'espressif' in server or ':80' in location:
+            # Don't label the IR blaster as TCL
+            return
         elif location:
-            # Generic Smart TV
-            self.found_devices.append({
-                'ip': ip,
-                'name': f"Smart TV ({ip})",
-                'type': 'generic'
-            })
-            logger.info(f"Discovered Generic SSDP device at {ip}")
+            device_type = 'generic'
+            device_name = self._get_device_name_from_location(headers.get('location', ''))
+            if not device_name:
+                device_name = f"TCL Smart TV"
+        else:
+            return
+        
+        self.found_devices.append({
+            'ip': ip,
+            'name': device_name,
+            'type': device_type
+        })
+        logger.info(f"Discovered {device_name} at {ip}")
+
+    def _get_roku_device_name(self, ip):
+        """Fetch actual device name from Roku ECP."""
+        try:
+            import requests
+            resp = requests.get(f"http://{ip}:8060/query/device-info", timeout=2)
+            if resp.status_code == 200:
+                # Simple XML parsing
+                content = resp.text
+                # Extract friendly name
+                name_start = content.find('<user-device-name>')
+                if name_start != -1:
+                    name_start += len('<user-device-name>')
+                    name_end = content.find('</user-device-name>', name_start)
+                    if name_end != -1:
+                        return content[name_start:name_end].strip()
+                
+                # Fallback to model name
+                model_start = content.find('<model-name>')
+                if model_start != -1:
+                    model_start += len('<model-name>')
+                    model_end = content.find('</model-name>', model_start)
+                    if model_end != -1:
+                        return content[model_start:model_end].strip()
+        except:
+            pass
+        return None
+
+    def _get_device_name_from_location(self, location_url):
+        """Try to fetch device name from UPnP description XML."""
+        if not location_url:
+            return None
+        try:
+            import requests
+            resp = requests.get(location_url, timeout=2)
+            if resp.status_code == 200:
+                content = resp.text
+                # Try to find friendlyName
+                name_start = content.find('<friendlyName>')
+                if name_start != -1:
+                    name_start += len('<friendlyName>')
+                    name_end = content.find('</friendlyName>', name_start)
+                    if name_end != -1:
+                        return content[name_start:name_end].strip()
+        except:
+            pass
+        return None

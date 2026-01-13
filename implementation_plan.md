@@ -1,4 +1,4 @@
-# Smart Universal Remote - Implementation Plan
+# Smart TCL Remote - Implementation Plan
 
 ## 1. System Architecture
 
@@ -10,7 +10,7 @@ The application will be built using a modular architecture to separate UI, Logic
 3.  **Communication Layer**:
     *   **Roku ECP**: HTTP-based control for Roku TVs.
     *   **Generic HTTP/TCP**: For other smart TVs.
-    *   **IR Bridge**: API to talk to an external ESP32 IR Blaster.
+    *   **IR Bridge**: API to talk to an external ESP32 IR Blaster (pre-configured with TCL codes).
 4.  **Discovery Layer**: Background service using **SSDP/mDNS (zeroconf)** to find devices.
 
 ## 2. Directory Structure
@@ -45,7 +45,6 @@ Project remote/
 *   Setup `requirements.txt`.
 
 ### Step 2: Network Discovery
-*   Implement SSDP discovery logic to find Roku devices (Target: `roku:ecp`).
 *   Implement generic port scanning or specific mDNS for other TCL models.
 
 ### Step 3: Roku Control Module

@@ -1,10 +1,10 @@
 [app]
 
 # (str) Title of your application
-title = SmartRemote
+title = TCL Smart Remote
 
 # (str) Package name
-package.name = smartremote
+package.name = tcl_smart_remote
 
 # (str) Package domain (needed for android/ios packaging)
 package.domain = com.ahab.projectremote

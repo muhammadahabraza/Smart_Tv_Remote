@@ -7,7 +7,7 @@ class RokuController(RemoteController):
     """Controls Roku-based TCL TVs via External Control Protocol (ECP)."""
 
     def __init__(self, ip_address, port=8060):
-        super().__init__(ip_address, "Roku TV")
+        super().__init__(ip_address, "TCL Roku TV")
         self.port = port
         self.base_url = f"http://{ip_address}:{port}"
 
@@ -28,11 +28,22 @@ class RokuController(RemoteController):
         return False
 
     def _extract_xml(self, xml, tag):
-        start = xml.find(f"<{tag}>")
-        if start == -1: return None
-        start += len(tag) + 2
-        end = xml.find(f"</{tag}>", start)
-        return xml[start:end]
+        """Simple XML extraction for specific tags without external deps."""
+        try:
+            # Find the start of the tag <tag...
+            tag_start = xml.find(f"<{tag}")
+            if tag_start == -1: return None
+            
+            # Find the end of the opening tag >
+            content_start = xml.find(">", tag_start) + 1
+            
+            # Find the start of the closing tag </tag>
+            content_end = xml.find(f"</{tag}>", content_start)
+            if content_end == -1: return None
+            
+            return xml[content_start:content_end].strip()
+        except:
+            return None
 
     def send_key(self, key_code):
         roku_key = KEY_MAP_ROKU.get(key_code)

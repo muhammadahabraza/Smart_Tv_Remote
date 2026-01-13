@@ -1,0 +1,298 @@
+#:kivy 2.3.0
+#:import hex kivy.utils.get_color_from_hex
+
+# 1. THEME & COLORS
+#:set color_bg hex('#121212')       
+#:set color_surface hex('#1E1E1E')  
+#:set color_on_surface hex('#E0E0E0')
+#:set color_accent hex('#E60012')   
+#:set color_accent_dim hex('#B0000E')
+#:set color_connected hex('#00C853')
+#:set color_offline hex('#D32F2F')
+#:set color_ir hex('#FF9800')
+
+<RoundedButton@Button>:
+    background_normal: ''
+    background_color: 0,0,0,0
+    color: color_on_surface
+    font_size: '18sp'
+    bold: True
+    canvas.before:
+        Color:
+            rgba: (color_surface) if self.state == 'normal' else (color_accent_dim)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [16, ]
+
+<CircleButton@Button>:
+    background_normal: ''
+    background_color: 0,0,0,0
+    color: color_on_surface
+    font_size: '20sp'
+    bold: True
+    canvas.before:
+        Color:
+            rgba: (color_surface) if self.state == 'normal' else (color_accent)
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+<DiscoveryScreen>:
+    name: 'discovery'
+    canvas.before:
+        Color:
+            rgba: color_bg
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(24)
+        spacing: dp(16)
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(80)
+            orientation: 'vertical'
+            Label:
+                text: "SmartRemote"
+                font_size: '24sp'
+                bold: True
+                color: color_accent
+            Label:
+                text: app.wifi_info_text
+                font_size: '14sp'
+                color: color_on_surface if app.wifi_connected else color_offline
+
+        RoundedButton:
+            text: "SCAN FOR DEVICES"
+            size_hint_y: None
+            height: dp(56)
+            on_release: root.scan_network()
+            canvas.before:
+                Color:
+                    rgba: color_accent
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [16,]
+
+        RecycleView:
+            id: rv_devices
+            viewclass: 'RoundedButton'
+            RecycleBoxLayout:
+                default_size: None, dp(70)
+                default_size_hint: 1, None
+                size_hint_y: None
+                height: self.minimum_height
+                orientation: 'vertical'
+                spacing: dp(12)
+
+        RoundedButton:
+            text: "MANUAL IR BLASTER"
+            size_hint_y: None
+            height: dp(56)
+            color: (1,1,1,1)
+            on_release: root.connect_ir_manual()
+            canvas.before:
+                Color:
+                    rgba: color_ir
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [16,]
+
+<SettingsScreen>:
+    name: 'settings'
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(24)
+        spacing: dp(20)
+        Label:
+            text: "Settings"
+            font_size: '22sp'
+            bold: True
+            size_hint_y: None
+            height: dp(60)
+
+        TextInput:
+            id: ir_ip_input
+            text: app.ir_blaster_ip
+            hint_text: "ESP32 IP Address"
+            multiline: False
+            size_hint_y: None
+            height: dp(50)
+            background_color: [1, 1, 1, 0.1]
+            foreground_color: [1, 1, 1, 1]
+
+        BoxLayout:
+            spacing: dp(10)
+            size_hint_y: None
+            height: dp(50)
+            TextInput:
+                id: timer_input
+                text: "30"
+                hint_text: "Min"
+            RoundedButton:
+                text: "TIMER OFF"
+                on_release: app.schedule_task(timer_input.text, 'power')
+
+        Widget:
+
+        RoundedButton:
+            text: "SAVE & BACK"
+            size_hint_y: None
+            height: dp(56)
+            on_release: root.save_settings(ir_ip_input.text)
+
+<ControlScreen>:
+    name: 'control'
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(20)
+        spacing: dp(16)
+
+        # Header
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            canvas.before:
+                Color:
+                    rgba: 1, 1, 1, 0.05
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [10,]
+            
+            BoxLayout:
+                padding: dp(10)
+                spacing: dp(10)
+                Widget:
+                    size_hint_x: None
+                    width: dp(12)
+                    canvas:
+                        Color:
+                            rgba: app.connection_status_color
+                        Ellipse:
+                            pos: self.x, self.center_y - dp(6)
+                            size: dp(12), dp(12)
+                
+                Label:
+                    text: app.connected_device_name
+                    halign: 'left'
+                    text_size: self.size
+                    bold: True
+
+            Button:
+                text: "⚙"
+                size_hint_x: None
+                width: dp(50)
+                background_color: 0,0,0,0
+                font_size: '24sp'
+                on_release: app.switch_screen('settings')
+
+        # Power & Nav
+        BoxLayout:
+            size_hint_y: None
+            height: dp(80)
+            padding: dp(20), 0
+            spacing: dp(20)
+            RoundedButton:
+                text: "SOURC"
+                on_release: app.send_command('back')
+            Button:
+                text: "POWER"
+                bold: True
+                background_color: 0,0,0,0
+                on_release: app.send_command('power')
+                canvas.before:
+                    Color:
+                        rgba: color_accent if self.state == 'normal' else color_accent_dim
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [40,]
+            RoundedButton:
+                text: "HOME"
+                on_release: app.send_command('home')
+
+        # D-PAD
+        FloatLayout:
+            size_hint_y: 0.5
+            CircleButton:
+                text: "▲"
+                size_hint: None, None
+                size: dp(70), dp(70)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.8}
+                on_release: app.send_command('up')
+            CircleButton:
+                text: "▼"
+                size_hint: None, None
+                size: dp(70), dp(70)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.2}
+                on_release: app.send_command('down')
+            CircleButton:
+                text: "◀"
+                size_hint: None, None
+                size: dp(70), dp(70)
+                pos_hint: {'center_x': 0.25, 'center_y': 0.5}
+                on_release: app.send_command('left')
+            CircleButton:
+                text: "▶"
+                size_hint: None, None
+                size: dp(70), dp(70)
+                pos_hint: {'center_x': 0.75, 'center_y': 0.5}
+                on_release: app.send_command('right')
+            CircleButton:
+                text: "OK"
+                size_hint: None, None
+                size: dp(90), dp(90)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+                on_release: app.send_command('select')
+
+        # Vol/Ch
+        GridLayout:
+            cols: 2
+            spacing: dp(20)
+            size_hint_y: 0.2
+            BoxLayout:
+                orientation: 'vertical'
+                spacing: dp(5)
+                RoundedButton:
+                    text: "+"
+                    on_release: app.send_command('vol_up')
+                RoundedButton:
+                    text: "VOL"
+                    disabled: True
+                RoundedButton:
+                    text: "-"
+                    on_release: app.send_command('vol_down')
+            BoxLayout:
+                orientation: 'vertical'
+                spacing: dp(5)
+                RoundedButton:
+                    text: "+"
+                    on_release: app.send_command('up')
+                RoundedButton:
+                    text: "CH"
+                    disabled: True
+                RoundedButton:
+                    text: "-"
+                    on_release: app.send_command('down')
+
+        # App Shortcuts
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            spacing: dp(10)
+            RoundedButton:
+                text: "Netflix"
+                on_release: app.launch_app('12')
+            RoundedButton:
+                text: "YouTube"
+                on_release: app.launch_app('837')
+            RoundedButton:
+                text: "Prime"
+                on_release: app.launch_app('13')
